@@ -1,18 +1,19 @@
-// server.js  (for @shopify/shopify-api v7.x)
+// server.js — @shopify/shopify-api v7.x
 require('@shopify/shopify-api/adapters/node'); // safe with v7
 
-const express = require('express');
-const dotenv  = require('dotenv');
-const path    = require('path');
-const cors    = require('cors');
-const helmet  = require('helmet');
+const express       = require('express');
+const dotenv        = require('dotenv');
+const path          = require('path');
+const cors          = require('cors');
+const helmet        = require('helmet');
+const cookieParser  = require('cookie-parser');
 
 dotenv.config();
 
-// Shopify API config instance you created in ./config/shopify
+// Your Shopify config (created with shopifyApi({...}) in ./config/shopify)
 const shopify = require('./config/shopify');
 
-// Your own routes
+// Your own routes (keep as-is)
 const wishlistRoutes = require('./routes/wishlist');
 const webhookRoutes  = require('./routes/webhooks');
 const shopifyRoutes  = require('./routes/shopify');
@@ -20,18 +21,17 @@ const shopifyRoutes  = require('./routes/shopify');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// IMPORTANT for OAuth cookies on Render/Heroku behind proxy
+// IMPORTANT: needed for OAuth cookies on Render/Heroku (behind proxy)
 app.set('trust proxy', 1);
 
 /* ---------- Security / parsing / static ---------- */
-// Allow embedding in Shopify admin and set our own CSP
 app.use(helmet({
-  contentSecurityPolicy: false,
-  frameguard: false,
+  contentSecurityPolicy: false,   // we'll set minimal CSP manually
+  frameguard: false,              // allow embedding in iframe
   crossOriginEmbedderPolicy: false,
 }));
 
-// Minimal CSP so Shopify admin can iframe your app
+// Minimal CSP so Shopify admin can embed the app
 app.use((req, res, next) => {
   res.setHeader(
     'Content-Security-Policy',
@@ -41,6 +41,7 @@ app.use((req, res, next) => {
 });
 
 app.use(cors({ origin: true, credentials: true }));
+app.use(cookieParser());                                   // <-- must be before /auth
 app.use('/webhooks', express.raw({ type: 'application/json' })); // raw body for webhooks
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -61,27 +62,66 @@ app.get('/health', (_req, res) => {
   });
 });
 
-/* ---------- OAuth flow ---------- */
+/* ---------- OAuth flow (Top-level bounce) ---------- */
 // Partner Dashboard → Configuration:
 //   App URL:                 https://<your-render>.onrender.com/auth
 //   Allowed redirection URL: https://<your-render>.onrender.com/auth/callback
 
-// Start OAuth
+// Step 1: ensure top-level context so cookies can be set
+app.get('/auth/toplevel', (req, res) => {
+  const { shop, host } = req.query;
+
+  // Set a cookie readable by client JS to mark top-level step
+  res.cookie('shopify.top_level_oauth', '1', {
+    httpOnly: false,   // must be readable by the browser
+    sameSite: 'none',  // required for embedded apps
+    secure: true,      // required on HTTPS
+  });
+
+  // Break out of the iframe and return to /auth at top-level
+  res
+    .status(200)
+    .type('html')
+    .send(`
+      <!DOCTYPE html>
+      <html>
+        <body>
+          <script>
+            window.top.location.href = "/auth?shop=${encodeURIComponent(shop || '')}&host=${encodeURIComponent(host || '')}";
+          </script>
+        </body>
+      </html>
+    `);
+});
+
+// Step 2: start OAuth (bounce to Shopify)
 app.get('/auth', async (req, res) => {
-  const { shop } = req.query;
+  console.log('AUTH cookies:', req.headers.cookie || '(none)');
+
+  const { shop, host } = req.query;
   if (!shop) return res.status(400).send('Missing ?shop');
+
+  // If top-level cookie not set yet, go run the toplevel step
+  if (!req.cookies['shopify.top_level_oauth']) {
+    return res.redirect(
+      `/auth/toplevel?shop=${encodeURIComponent(shop)}&host=${encodeURIComponent(host || '')}`
+    );
+  }
+
   await shopify.auth.begin({
     shop,
     callbackPath: '/auth/callback',
-    isOnline: false,
+    isOnline: false,         // offline access
     rawRequest: req,
     rawResponse: res,
   });
 });
 
-// OAuth callback with good logging
+// Step 3: callback — exchange code for session, then into the app
 app.get('/auth/callback', async (req, res) => {
   try {
+    console.log('CALLBACK cookies:', req.headers.cookie || '(none)');
+
     const { session } = await shopify.auth.callback({
       rawRequest: req,
       rawResponse: res,
