@@ -1,5 +1,5 @@
 // server.js  (for @shopify/shopify-api v7.x)
-require('@shopify/shopify-api/adapters/node'); // safe to keep; ignored on v7
+require('@shopify/shopify-api/adapters/node'); // safe with v7
 
 const express = require('express');
 const dotenv  = require('dotenv');
@@ -9,10 +9,10 @@ const helmet  = require('helmet');
 
 dotenv.config();
 
-// Your Shopify config instance (created with shopifyApi({...}))
+// Shopify API config instance you created in ./config/shopify
 const shopify = require('./config/shopify');
 
-// Your routes
+// Your own routes
 const wishlistRoutes = require('./routes/wishlist');
 const webhookRoutes  = require('./routes/webhooks');
 const shopifyRoutes  = require('./routes/shopify');
@@ -20,11 +20,14 @@ const shopifyRoutes  = require('./routes/shopify');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+// IMPORTANT for OAuth cookies on Render/Heroku behind proxy
+app.set('trust proxy', 1);
+
 /* ---------- Security / parsing / static ---------- */
-// IMPORTANT: allow embedding and set our own CSP for Shopify admin
+// Allow embedding in Shopify admin and set our own CSP
 app.use(helmet({
-  contentSecurityPolicy: false,   // we'll set a minimal CSP ourselves
-  frameguard: false,              // allow iframe embedding
+  contentSecurityPolicy: false,
+  frameguard: false,
   crossOriginEmbedderPolicy: false,
 }));
 
@@ -38,7 +41,7 @@ app.use((req, res, next) => {
 });
 
 app.use(cors({ origin: true, credentials: true }));
-app.use('/webhooks', express.raw({ type: 'application/json' })); // raw for webhooks
+app.use('/webhooks', express.raw({ type: 'application/json' })); // raw body for webhooks
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -76,7 +79,7 @@ app.get('/auth', async (req, res) => {
   });
 });
 
-// OAuth callback
+// OAuth callback with good logging
 app.get('/auth/callback', async (req, res) => {
   try {
     const { session } = await shopify.auth.callback({
@@ -84,14 +87,17 @@ app.get('/auth/callback', async (req, res) => {
       rawResponse: res,
     });
 
-    // TODO: register webhooks using `session` if needed
-
     const { host, shop } = req.query;
     return res.redirect(
       `/app?host=${encodeURIComponent(host || '')}&shop=${encodeURIComponent(shop || session.shop)}`
     );
   } catch (e) {
-    console.error('OAuth callback error', e);
+    console.error('OAuth callback error:', {
+      message: e?.message,
+      name: e?.name,
+      stack: e?.stack,
+      query: req.query,
+    });
     return res.status(500).send('Auth error');
   }
 });
@@ -100,7 +106,7 @@ app.get('/auth/callback', async (req, res) => {
 // v7-compatible session guard
 app.get('/app', async (req, res) => {
   try {
-    const session = await shopify.utils.loadCurrentSession(req, res, false); // offline session
+    const session = await shopify.utils.loadCurrentSession(req, res, false); // offline
     if (!session) {
       const { shop, host } = req.query;
       return res.redirect(
@@ -108,7 +114,7 @@ app.get('/app', async (req, res) => {
       );
     }
 
-    // Serve a simple page for now (replace with your real admin UI)
+    // Simple UI for now; replace with your real admin app
     res
       .status(200)
       .send('<html><body style="font-family:system-ui;padding:24px">Wishlist app loaded ✔</body></html>');
@@ -118,9 +124,8 @@ app.get('/app', async (req, res) => {
   }
 });
 
-/* ---------- Optional: landing at "/" ---------- */
+/* ---------- Optional landing ---------- */
 app.get('/', (_req, res) => {
-  // Show a landing page if someone hits root directly
   return res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
