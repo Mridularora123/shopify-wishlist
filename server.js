@@ -20,7 +20,16 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 
 /* ---------- Security / parsing / static ---------- */
-app.use(helmet());
+// app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,
+  frameguard: false,
+  crossOriginEmbedderPolicy: false,
+}));
+
+// add Shopify CSP headers so admin can iframe the app
+app.use(shopify.cspHeaders());
+
 app.use(cors({ origin: true, credentials: true }));
 app.use('/webhooks', express.raw({ type: 'application/json' })); // raw for webhooks
 app.use(express.json({ limit: '10mb' }));
@@ -81,10 +90,17 @@ app.get('/auth/callback', async (req, res) => {
 });
 
 /* ---------- Embedded app UI ---------- */
-app.get('/app', (_req, res) => {
+// app.get('/app', (_req, res) => {
   // Serve your admin UI; for now a simple OK page:
-  res.send('Wishlist app loaded ✔');
+//   res.send('Wishlist app loaded ✔');
+// });
+
+app.get('/app', shopify.validateAuthenticatedSession(), (_req, res) => {
+  res
+    .status(200)
+    .send('<html><body style="font-family:system-ui;padding:24px">Wishlist app loaded ✔</body></html>');
 });
+
 
 /* ---------- Optional: if you keep App URL = "/" ----------
 app.get('/', (req, res) => {
