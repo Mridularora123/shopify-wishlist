@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swym Relay Admin Dashboard</title>
+    <link rel="stylesheet" href="admin.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-heart"></i> Swym Relay</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li class="menu-item active" data-section="dashboard">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </li>
+                <li class="menu-item" data-section="wishlists">
+                    <i class="fas fa-list"></i>
+                    <span>Wishlists</span>
+                </li>
+                <li class="menu-item" data-section="notifications">
+                    <i class="fas fa-bell"></i>
+                    <span>Notifications</span>
+                </li>
+                <li class="menu-item" data-section="analytics">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Analytics</span>
+                </li>
+                <li class="menu-item" data-section="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <h1 id="page-title">Dashboard</h1>
+                </div>
+                <div class="header-right">
+                    <div class="shop-info">
+                        <i class="fas fa-store"></i>
+                        <span id="shop-name">Your Shop</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dashboard Section -->
+            <section id="dashboard-section" class="content-section active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-heart"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="total-wishlists">0</h3>
+                            <p>Total Wishlists</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="active-customers">0</h3>
+                            <p>Active Customers</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-bell"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="notifications-sent">0</h3>
+                            <p>Notifications Sent</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-shopping-cart"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="conversion-rate">0%</h3>
+                            <p>Conversion Rate</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-charts">
+                    <div class="chart-container">
+                        <h3>Wishlist Activity</h3>
+                        <canvas id="wishlist-chart"></canvas>
+                    </div>
+                    <div class="recent-activity">
+                        <h3>Recent Activity</h3>
+                        <div id="activity-list" class="activity-list">
+                            <!-- Activity items will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Wishlists Section -->
+            <section id="wishlists-section" class="content-section">
+                <div class="section-header">
+                    <h2>Customer Wishlists</h2>
+                    <button class="btn btn-primary" onclick="refreshWishlists()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Customer</th>
+                                <th>Wishlist Name</th>
+                                <th>Items</th>
+                                <th>Created</th>
+                                <th>Last Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wishlists-table-body">
+                            <!-- Wishlist data will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Notifications Section -->
+            <section id="notifications-section" class="content-section">
+                <div class="section-header">
+                    <h2>Notification Management</h2>
+                    <button class="btn btn-primary" onclick="sendTestNotification()">
+                        <i class="fas fa-paper-plane"></i> Send Test
+                    </button>
+                </div>
+                
+                <div class="notification-tabs">
+                    <button class="tab-btn active" data-tab="pending">Pending</button>
+                    <button class="tab-btn" data-tab="sent">Sent</button>
+                    <button class="tab-btn" data-tab="subscriptions">Subscriptions</button>
+                </div>
+
+                <div class="tab-content">
+                    <div id="pending-tab" class="tab-pane active">
+                        <div id="pending-notifications" class="notifications-list">
+                            <!-- Pending notifications will be populated here -->
+                        </div>
+                    </div>
+                    <div id="sent-tab" class="tab-pane">
+                        <div id="sent-notifications" class="notifications-list">
+                            <!-- Sent notifications will be populated here -->
+                        </div>
+                    </div>
+                    <div id="subscriptions-tab" class="tab-pane">
+                        <div id="subscriptions-list" class="subscriptions-list">
+                            <!-- Subscriptions will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Analytics Section -->
+            <section id="analytics-section" class="content-section">
+                <div class="section-header">
+                    <h2>Analytics & Reports</h2>
+                    <div class="date-range-picker">
+                        <input type="date" id="start-date">
+                        <input type="date" id="end-date">
+                        <button class="btn btn-secondary" onclick="updateAnalytics()">Update</button>
+                    </div>
+                </div>
+                
+                <div class="analytics-grid">
+                    <div class="analytics-card">
+                        <h3>Popular Products</h3>
+                        <div id="popular-products" class="product-list">
+                            <!-- Popular products will be populated here -->
+                        </div>
+                    </div>
+                    <div class="analytics-card">
+                        <h3>Customer Engagement</h3>
+                        <canvas id="engagement-chart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section id="settings-section" class="content-section">
+                <div class="section-header">
+                    <h2>App Settings</h2>
+                </div>
+                
+                <div class="settings-form">
+                    <div class="form-group">
+                        <label for="email-notifications">Email Notifications</label>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="email-notifications" checked>
+                            <label for="email-notifications" class="toggle-label"></label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="notification-frequency">Notification Frequency</label>
+                        <select id="notification-frequency">
+                            <option value="immediate">Immediate</option>
+                            <option value="hourly">Hourly</option>
+                            <option value="daily">Daily</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="webhook-url">Webhook URL</label>
+                        <input type="url" id="webhook-url" placeholder="https://your-app.com/webhooks">
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="saveSettings()">
+                        <i class="fas fa-save"></i> Save Settings
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="admin.js"></script>
+</body>
+</html>
+
