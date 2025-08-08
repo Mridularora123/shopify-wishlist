@@ -1,24 +1,40 @@
-// server.js — @shopify/shopify-api v7.x
-require('@shopify/shopify-api/adapters/node'); // safe with v7
+require('@shopify/shopify-api/adapters/node');
 
-const express       = require('express');
-const dotenv        = require('dotenv');
-const path          = require('path');
-const cors          = require('cors');
-const helmet        = require('helmet');
-const cookieParser  = require('cookie-parser');
+const express = require('express');
+const dotenv = require('dotenv');
+const path = require('path');
+const cors = require('cors');
+const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
 
 dotenv.config();
+
+// --- Environment Variable Validation ---
+const requiredEnvVars = [
+  'SHOPIFY_API_KEY',
+  'SHOPIFY_API_SECRET',
+  'SHOPIFY_SCOPES',
+  'SHOP_CUSTOM_URL', // Assuming this is needed for your app's URL
+  'SESSION_SECRET' // For express-session if you decide to use it
+];
+
+requiredEnvVars.forEach(envVar => {
+  if (!process.env[envVar]) {
+    console.error(`Missing required environment variable: ${envVar}`);
+    process.exit(1);
+  }
+});
 
 // Your Shopify config (created with shopifyApi({...}) in ./config/shopify)
 const shopify = require('./config/shopify');
 
 // Your own routes (keep as-is)
 const wishlistRoutes = require('./routes/wishlist');
-const webhookRoutes  = require('./routes/webhooks');
-const shopifyRoutes  = require('./routes/shopify');
+const webhookRoutes = require('./routes/webhooks');
+const shopifyRoutes = require('./routes/shopify');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 3000;
 
 // IMPORTANT: needed for OAuth cookies on Render/Heroku (behind proxy)
@@ -26,8 +42,8 @@ app.set('trust proxy', 1);
 
 /* ---------- Security / parsing / static ---------- */
 app.use(helmet({
-  contentSecurityPolicy: false,   // we'll set minimal CSP manually
-  frameguard: false,              // allow embedding in iframe
+  contentSecurityPolicy: false, // we'll set minimal CSP manually
+  frameguard: false,            // allow embedding in iframe
   crossOriginEmbedderPolicy: false,
 }));
 
@@ -40,17 +56,44 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(cors({ origin: true, credentials: true }));
-app.use(cookieParser());                                   // <-- must be before /auth
+// --- Corrected CORS Configuration ---
+// Explicitly allow only Shopify domains for CORS
+const allowedOrigins = [
+  'https://admin.shopify.com',
+  `https://${process.env.SHOP_CUSTOM_URL}` // Your custom shop URL if applicable
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true
+}));
+
+app.use(cookieParser());
 app.use('/webhooks', express.raw({ type: 'application/json' })); // raw body for webhooks
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// --- Rate Limiting ---
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again after 15 minutes'
+});
+app.use('/api/', apiLimiter); // Apply to all API routes
+
 /* ---------- API routes (yours) ---------- */
 app.use('/api/wishlist', wishlistRoutes);
-app.use('/api/shopify',  shopifyRoutes);
-app.use('/webhooks',     webhookRoutes);
+app.use('/api/shopify', shopifyRoutes);
+app.use('/webhooks', webhookRoutes);
 
 /* ---------- Health ---------- */
 app.get('/health', (_req, res) => {
