@@ -147,20 +147,29 @@ app.get('/auth/callback', async (req, res) => {
 app.get('/app', async (req, res) => {
   try {
     const session = await shopify.utils.loadCurrentSession(req, res, false); // offline
-    if (!session) {
+
+    // If no session or missing token → redirect to auth
+    if (!session || !session.accessToken) {
       const { shop, host } = req.query;
+      console.warn('No valid session — redirecting to /auth');
       return res.redirect(
         `/auth?shop=${encodeURIComponent(shop || '')}&host=${encodeURIComponent(host || '')}`
       );
     }
 
-    // Simple UI for now; replace with your real admin app
+    // ✅ Session is valid — load your app's embedded UI
     res
       .status(200)
       .send('<html><body style="font-family:system-ui;padding:24px">Wishlist app loaded ✔</body></html>');
+
   } catch (err) {
-    console.error('Session load error:', err);
-    res.status(500).send('Session error');
+    console.error('Error loading /app route:', err);
+
+    // Redirect to auth instead of throwing 500
+    const { shop, host } = req.query;
+    return res.redirect(
+      `/auth?shop=${encodeURIComponent(shop || '')}&host=${encodeURIComponent(host || '')}`
+    );
   }
 });
 
