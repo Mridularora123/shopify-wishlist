@@ -12,7 +12,7 @@ dotenv.config();
 /** Shopify SDK config */
 const shopify = require('./config/shopify');
 
-/** Your routes (adjust paths if not created yet) */
+/** Your routes */
 const wishlistRoutes = require('./routes/wishlist');   // /api/wishlist
 const webhookRoutes  = require('./routes/webhooks');   // /webhooks
 const shopifyRoutes  = require('./routes/shopify');    // /api/shopify
@@ -26,7 +26,7 @@ const PORT = process.env.PORT || 3000;
 app.use(
   helmet({
     frameguard: false,                // disable X-Frame-Options
-    contentSecurityPolicy: false,     // we’ll set our own CSP
+    contentSecurityPolicy: false,     // we'll set our own CSP
     crossOriginEmbedderPolicy: false, // avoid COEP issues in iframe
   })
 );
@@ -45,20 +45,20 @@ app.use((req, res, next) => {
   next();
 });
 
-/** CORS (keep open for the Admin origin; tighten later if you want) */
+/** CORS */
 app.use(cors({ origin: true, credentials: true }));
 
-/** IMPORTANT: raw body for webhooks BEFORE json parser */
+/** Raw body for webhooks BEFORE json parser */
 app.use('/webhooks', express.raw({ type: 'application/json' }));
 
 /** Normal parsers */
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-/** Static assets (optional landing page) */
+/** Static assets */
 app.use(express.static(path.join(__dirname, 'public')));
 
-/* ---------------- Health check (Render will hit this) ---------------- */
+/* ---------------- Health check ---------------- */
 app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'OK',
@@ -68,12 +68,7 @@ app.get('/health', (_req, res) => {
   });
 });
 
-/* ---------------- OAuth flow (simple & reliable) ---------------- */
-/**
- * Partner Dashboard → App setup:
- *   App URL:                    https://<your-render>.onrender.com/auth
- *   Allowed redirection URL(s): https://<your-render>.onrender.com/auth/callback
- */
+/* ---------------- OAuth flow ---------------- */
 
 // Start OAuth
 app.get('/auth', async (req, res) => {
@@ -83,7 +78,7 @@ app.get('/auth', async (req, res) => {
     await shopify.auth.begin({
       shop,
       callbackPath: '/auth/callback',
-      isOnline: false,     // offline tokens are typical for embedded admin apps
+      isOnline: false,
       rawRequest: req,
       rawResponse: res,
     });
@@ -101,9 +96,8 @@ app.get('/auth/callback', async (req, res) => {
       rawResponse: res,
     });
 
-    // TODO (optional): register webhooks using `session` here
+    // TODO: register webhooks here if needed
 
-    // Redirect into the embedded UI
     const { host, shop } = req.query;
     return res.redirect(
       `/app?host=${encodeURIComponent(host || '')}&shop=${encodeURIComponent(
@@ -118,7 +112,6 @@ app.get('/auth/callback', async (req, res) => {
 
 /* ---------------- Embedded Admin UI ---------------- */
 app.get('/app', (_req, res) => {
-  // Replace with your real UI (React/Vite build etc.)
   res.type('html').send(`<!doctype html>
 <html>
   <head><meta charset="utf-8"><title>Wishlist App</title></head>
@@ -134,17 +127,22 @@ app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/shopify',  shopifyRoutes);
 app.use('/webhooks',     webhookRoutes);
 
-/* ---------------- Root: optional marketing/landing ---------------- */
-app.get('/', (_req, res) => {
-  const file = path.join(__dirname, 'public', 'index.html');
-  // If you don’t have a public/index.html, this just shows a tiny page:
-  res.sendFile(file, err => {
-    if (err) {
-      res.type('html').send(
-        '<h2>Wishlist App</h2><p>Add <code>?shop=your-store.myshopify.com</code> to start OAuth, or open from Shopify Admin.</p>'
-      );
-    }
-  });
+/* ---------------- Root redirect ---------------- */
+app.get('/', (req, res) => {
+  const { shop, host } = req.query;
+
+  if (host) {
+    return res.redirect(
+      `/app?host=${encodeURIComponent(host)}${shop ? `&shop=${encodeURIComponent(shop)}` : ''}`
+    );
+  }
+
+  if (shop) return res.redirect(`/auth?shop=${encodeURIComponent(shop)}`);
+
+  res.type('html').send(`
+    <h2>Wishlist App</h2>
+    <p>Open this app from your Shopify Admin.</p>
+  `);
 });
 
 /* ---------------- Errors & 404 ---------------- */
